@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-casino-green: #0b4226;
+  --color-gold: #fcc201;
+}
+
+body {
+  margin: 0;
+  background-color: #0c111c;
+  color: white;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
