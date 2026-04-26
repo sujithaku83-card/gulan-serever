@@ -169,8 +169,6 @@ class Room {
   setThurup(socketId, card) {
     if (this.gameState !== 'setting_thurup' || socketId !== this.highestBidder) return;
     this.hiddenThurup = card;
-    const player = this.getPlayer(socketId);
-    player.hand = player.hand.filter(c => c.suit !== card.suit || c.name !== card.name);
     
     this.gameState = 'waiting_to_start';
     // Determine who plays the first card of the game
@@ -196,15 +194,6 @@ class Room {
     this.thurup = this.hiddenThurup;
     this.isThurupRevealed = true;
     this.broadcastState();
-    
-    setTimeout(() => {
-      this.thurup = null; 
-      const bidder = this.getPlayer(this.highestBidder);
-      if (bidder) {
-         bidder.hand.push(this.hiddenThurup);
-      }
-      this.broadcastState();
-    }, 3000);
   }
 
   playCard(socketId, card) {

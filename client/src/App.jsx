@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 import Table from './components/Table';
 import './index.css';
 
-const socket = io('http://localhost:3001');
+const socket = io('https://gulan-game-server.onrender.com');
 
 function App() {
   const [gameState, setGameState] = useState('lobby');
