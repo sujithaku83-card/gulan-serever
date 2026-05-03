@@ -1,6 +1,6 @@
 const SUITS = ['hearts', 'diamonds', 'clubs', 'spades'];
 const RANKS = [
-  { name: '3', points: 3, power: 9 },
+  { name: '3', points: 3, power: 8 },
   { name: 'J', points: 3, power: 8 },
   { name: '9', points: 2, power: 7 },
   { name: 'A', points: 1, power: 6 },

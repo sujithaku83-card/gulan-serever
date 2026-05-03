@@ -1,12 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Volume2, VolumeX, Coins, Send } from 'lucide-react';
 import Card from './Card';
+import useVoiceChat from '../hooks/useVoiceChat';
+import Chat from './Chat';
+
+const AudioPlayer = ({ stream, muted }) => {
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    if (audioRef.current && stream) {
+      audioRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  return <audio ref={audioRef} autoPlay muted={muted} className="hidden" />;
+};
 
 export default function Table({ gameState, sessionData, socket, roomId }) {
   const [micOn, setMicOn] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
   const [betValue, setBetValue] = useState(20);
   const [coinTransferAmount, setCoinTransferAmount] = useState(1);
+  const [showCoinManager, setShowCoinManager] = useState(false);
+  const [manualColor, setManualColor] = useState('yellow');
+  const [manualAmount, setManualAmount] = useState(1);
+  const [manualTarget, setManualTarget] = useState('T2');
+
+  const { peers } = useVoiceChat(socket, roomId, socket.id, micOn, soundOn);
 
   if (!sessionData) return null;
 
@@ -30,7 +50,7 @@ export default function Table({ gameState, sessionData, socket, roomId }) {
   };
 
   const suitOrder = { 'hearts': 1, 'spades': 2, 'diamonds': 3, 'clubs': 4 };
-  const rankOrder = { 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1, '3': 8 };
+  const rankOrder = { '3': 8, 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1 };
   const sortedHand = myHand ? [...myHand].sort((a, b) => {
     if (suitOrder[a.suit] !== suitOrder[b.suit]) return suitOrder[a.suit] - suitOrder[b.suit];
     return (rankOrder[b.name] || 0) - (rankOrder[a.name] || 0);
@@ -94,28 +114,86 @@ export default function Table({ gameState, sessionData, socket, roomId }) {
       </div>
 
       {/* Top Right Score Board */}
-      <div className="absolute top-6 right-6 z-40 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 flex gap-8 items-center shadow-2xl">
-        <div className="text-center">
-          <div className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-1">Team 1 Coin</div>
-          <div className="text-2xl font-black text-white">{teams.T1.points}</div>
-          <div className="flex gap-2 mt-3 flex-wrap justify-center w-40">
-            {[...Array(teams.T1.coins.yellow)].map((_, i) => <div key={`t1y-${i}`} className="w-8 h-8 rounded-full bg-yellow-400 border-2 border-yellow-600 shadow-inner" />)}
-            {teams.T1.coins.red > 0 && <div className="w-8 h-8 rounded-full bg-red-600 border-2 border-red-800 shadow-inner" />}
+      <div className="absolute top-6 right-6 z-40 bg-slate-900/80 backdrop-blur-md p-4 rounded-2xl border border-white/5 flex flex-col gap-2 shadow-2xl">
+        <div className="flex gap-8 items-center">
+          <div className="text-center">
+            <div className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-1 flex items-center justify-center gap-2">
+              Team 1 Coin
+              {teams.T1.L > 0 && <span className="bg-rose-600 text-white px-1.5 py-0.5 rounded text-[10px]">L{teams.T1.L}</span>}
+            </div>
+            <div className="text-2xl font-black text-white">{teams.T1.points}</div>
+            <div className="flex gap-2 mt-3 flex-wrap justify-center w-40">
+              {[...Array(teams.T1.coins.yellow)].map((_, i) => <div key={`t1y-${i}`} className="w-8 h-8 rounded-full bg-yellow-400 border-2 border-yellow-600 shadow-inner" />)}
+              {teams.T1.coins.red > 0 && <div className="w-8 h-8 rounded-full bg-red-600 border-2 border-red-800 shadow-inner" />}
+            </div>
+          </div>
+          <div className="w-px h-16 bg-white/10" />
+          <div className="text-center">
+            <div className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-1 flex items-center justify-center gap-2">
+              Team 2 Coin
+              {teams.T2.L > 0 && <span className="bg-rose-600 text-white px-1.5 py-0.5 rounded text-[10px]">L{teams.T2.L}</span>}
+            </div>
+            <div className="text-2xl font-black text-white">{teams.T2.points}</div>
+            <div className="flex gap-2 mt-3 flex-wrap justify-center w-40">
+              {[...Array(teams.T2.coins.yellow)].map((_, i) => <div key={`t2y-${i}`} className="w-8 h-8 rounded-full bg-yellow-400 border-2 border-yellow-600 shadow-inner" />)}
+              {teams.T2.coins.red > 0 && <div className="w-8 h-8 rounded-full bg-red-600 border-2 border-red-800 shadow-inner" />}
+            </div>
           </div>
         </div>
-        <div className="w-px h-16 bg-white/10" />
-        <div className="text-center">
-          <div className="text-xs text-slate-400 font-bold tracking-widest uppercase mb-1">Team 2 Coin</div>
-          <div className="text-2xl font-black text-white">{teams.T2.points}</div>
-          <div className="flex gap-2 mt-3 flex-wrap justify-center w-40">
-            {[...Array(teams.T2.coins.yellow)].map((_, i) => <div key={`t2y-${i}`} className="w-8 h-8 rounded-full bg-yellow-400 border-2 border-yellow-600 shadow-inner" />)}
-            {teams.T2.coins.red > 0 && <div className="w-8 h-8 rounded-full bg-red-600 border-2 border-red-800 shadow-inner" />}
-          </div>
-        </div>
+        {(teams.T1.captain === socket.id || teams.T2.captain === socket.id) && (
+          <button onClick={() => setShowCoinManager(true)} className="mt-2 text-xs bg-slate-800 hover:bg-slate-700 text-white py-2 rounded-xl border border-slate-600 w-full uppercase tracking-widest font-bold transition-all active:scale-95 shadow-md">
+            Manual Coin Transfer
+          </button>
+        )}
       </div>
+
+      {/* Coin Manager Modal */}
+      {showCoinManager && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900/95 backdrop-blur-xl px-8 py-6 rounded-3xl border border-yellow-500 shadow-[0_0_50px_rgba(234,179,8,0.3)] z-[60] flex flex-col gap-4 animate-in zoom-in w-80">
+          <div className="text-yellow-500 font-black uppercase tracking-widest text-center text-xl">Transfer Coins</div>
+          <div className="text-slate-300 text-xs text-center mb-2">Manually transfer coins to a team</div>
+          
+          <div className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
+            <span className="text-white font-bold text-sm">Color:</span>
+            <select value={manualColor} onChange={e => setManualColor(e.target.value)} className="bg-slate-900 text-white px-3 py-1 rounded-lg border border-slate-600 outline-none">
+               <option value="yellow">Yellow</option>
+               <option value="red">Red</option>
+            </select>
+          </div>
+
+          <div className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
+            <span className="text-white font-bold text-sm">Amount:</span>
+            <select value={manualAmount} onChange={e => setManualAmount(Number(e.target.value))} className="bg-slate-900 text-white px-3 py-1 rounded-lg border border-slate-600 outline-none">
+               {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+
+          <div className="flex justify-between items-center bg-slate-800 p-3 rounded-xl border border-slate-700">
+            <span className="text-white font-bold text-sm">To Team:</span>
+            <select value={manualTarget} onChange={e => setManualTarget(e.target.value)} className="bg-slate-900 text-white px-3 py-1 rounded-lg border border-slate-600 outline-none">
+               <option value="T1">Team 1</option>
+               <option value="T2">Team 2</option>
+            </select>
+          </div>
+
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => setShowCoinManager(false)} className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl border border-slate-600 transition-all text-xs uppercase">Cancel</button>
+            <button onClick={() => {
+               socket.emit('manualCoinTransfer', { roomId, color: manualColor, amount: manualAmount, targetTeam: manualTarget });
+               setShowCoinManager(false);
+            }} className="flex-1 py-3 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-black rounded-xl shadow-[0_0_20px_rgba(234,179,8,0.4)] transition-all text-xs uppercase">Transfer</button>
+          </div>
+        </div>
+      )}
 
       {/* Center Table Area (Lobby / Play state info) */}
       <div className="z-10 flex flex-col items-center">
+        {(teams.T1.L >= 3 || teams.T2.L >= 3) && gameState === 'lobby' && (
+          <div className="absolute top-32 bg-red-600/90 text-white px-8 py-3 rounded-full font-black tracking-widest uppercase shadow-[0_0_30px_rgba(220,38,38,0.8)] border-2 border-red-400 animate-pulse z-50">
+            ⚠️ FINAL GAME BEFORE COLLAPSE ⚠️
+          </div>
+        )}
+
         {gameState === 'lobby' && (
           <div className="text-center space-y-6">
             <h2 className="text-3xl font-black text-white/50 uppercase tracking-widest">
@@ -153,19 +231,11 @@ export default function Table({ gameState, sessionData, socket, roomId }) {
              )}
              
              {/* Render Trick Cards in the middle */}
-             {gameState === 'playing' && currentTrick && currentTrick.length > 0 && !sessionData.thurup && (
+             {gameState === 'playing' && currentTrick && currentTrick.length > 0 && (
                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex -space-x-8 z-20">
                  {currentTrick.map((play, i) => (
                    <Card key={i} card={play.card} zIndex={i} />
                  ))}
-               </div>
-             )}
-             
-             {/* Render revealed thurup */}
-             {sessionData.thurup && (
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 scale-150 shadow-[0_0_50px_rgba(234,179,8,0.6)] rounded-xl animate-in zoom-in">
-                 <Card card={sessionData.thurup} />
-                 <div className="absolute -top-8 w-full text-center text-yellow-400 font-black tracking-widest text-lg drop-shadow-md">THURUPPU</div>
                </div>
              )}
           </div>
@@ -273,37 +343,42 @@ export default function Table({ gameState, sessionData, socket, roomId }) {
           <div className="text-slate-400 text-xs mt-2 max-w-[150px] mx-auto">Waiting for starting player to start...</div>
         </div>
       )}
-      {/* Captain Controls (Win/Lose Declarations) */}
-      {(teams.T1.captain === socket.id || teams.T2.captain === socket.id) && gameState === 'round_finished' && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900/95 backdrop-blur-xl px-10 py-8 rounded-3xl border border-yellow-500 flex flex-col gap-4 items-center shadow-[0_0_50px_rgba(234,179,8,0.3)] z-50 animate-in zoom-in">
-          <span className="text-yellow-500 font-black uppercase tracking-widest text-2xl">Round Finished</span>
-          <span className="text-slate-300 text-sm mb-2">Captains: Claim your coin based on the final points!</span>
-          <div className="flex gap-4 items-center mb-2">
-            <span className="text-white font-bold">Coins to transfer:</span>
-            <select value={coinTransferAmount} onChange={(e) => setCoinTransferAmount(Number(e.target.value))} className="bg-slate-800 text-white font-bold px-4 py-2 rounded-lg border border-slate-600 outline-none">
-              {[1,2,3,4,5,6].map(num => <option key={num} value={num}>{num}</option>)}
-            </select>
-          </div>
-          <button onClick={() => socket.emit('declareWin', { roomId, amount: coinTransferAmount })} className="px-8 py-4 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-slate-900 font-black rounded-xl shadow-[0_0_30px_rgba(245,158,11,0.6)] active:scale-95 transition-all text-xl uppercase tracking-wider">
-            Transfer Coin
-          </button>
-        </div>
-      )}
-
-      {/* Waiting for Captains */}
-      {!(teams.T1.captain === socket.id || teams.T2.captain === socket.id) && gameState === 'round_finished' && (
+      {/* Round Finished Notification */}
+      {gameState === 'round_finished' && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-900/90 backdrop-blur-md px-10 py-8 rounded-3xl border border-white/10 flex flex-col gap-2 items-center shadow-2xl z-50 animate-in zoom-in">
-          <span className="text-yellow-500 font-black uppercase tracking-widest text-xl">Round Finished</span>
-          <span className="text-slate-400 text-sm">Waiting for Captains to transfer coins...</span>
+          <span className="text-yellow-500 font-black uppercase tracking-widest text-2xl">Round Finished</span>
+          <span className="text-slate-400 text-sm">Returning to lobby...</span>
         </div>
       )}
 
-      {/* SHOW THURUP Button */}
-      {gameState === 'playing' && !sessionData.isThurupRevealed && (
-         <button onClick={() => socket.emit('askThurup', roomId)} className="absolute right-8 bottom-32 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-full font-black uppercase tracking-wider shadow-[0_0_20px_rgba(79,70,229,0.5)] active:scale-95 transition-all z-40">
-           SHOW
-         </button>
+      {/* SHOW THURUP Button or REVEALED THURUP */}
+      {gameState === 'playing' && (
+        <div className="absolute right-8 bottom-32 z-40 flex flex-col items-center">
+          {!sessionData.isThurupRevealed ? (
+            <button onClick={() => socket.emit('askThurup', roomId)} className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-full font-black uppercase tracking-wider shadow-[0_0_20px_rgba(79,70,229,0.5)] active:scale-95 transition-all">
+              SHOW THURUP
+            </button>
+          ) : sessionData.thurup ? (
+            <div className="scale-75 origin-bottom-right shadow-[0_0_30px_rgba(234,179,8,0.4)] rounded-xl animate-in slide-in-from-right relative">
+              <Card card={sessionData.thurup} />
+              <div className="absolute -top-6 w-full text-center text-yellow-400 font-black tracking-widest text-sm drop-shadow-md bg-slate-900/50 px-3 py-1 rounded-full border border-yellow-500/30">THURUPPU</div>
+            </div>
+          ) : null}
+        </div>
       )}
+
+      {/* Hidden Audio Elements for Voice Chat */}
+      {Object.entries(peers).map(([peerId, stream]) => (
+        <AudioPlayer key={peerId} stream={stream} muted={!soundOn} />
+      ))}
+
+      {/* Text Chat Component */}
+      <Chat 
+        socket={socket} 
+        roomId={roomId} 
+        playerName={sessionData.players.find(p => p.socketId === socket.id)?.name} 
+        initialHistory={sessionData.chatHistory || []} 
+      />
     </div>
   );
 }

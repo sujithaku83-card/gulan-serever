@@ -9,9 +9,14 @@ class Room {
     
     this.centralCoins = { yellow: 6, red: 1 };
     this.teams = {
-      T1: { captain: null, coins: { yellow: 0, red: 0 }, players: [] },
-      T2: { captain: null, coins: { yellow: 0, red: 0 }, players: [] }
+      T1: { captain: null, coins: { yellow: 0, red: 0 }, L: 0, players: [] },
+      T2: { captain: null, coins: { yellow: 0, red: 0 }, L: 0, players: [] }
     };
+    
+    this.pendingCollapse = false;
+    this.gamesAfterL3 = 0;
+    
+    this.chatHistory = [];
     
     this.deck = new Deck();
     
@@ -44,14 +49,34 @@ class Room {
     return this.players.find(p => p.socketId === socketId);
   }
 
+  addChatMessage(socketId, message) {
+    const player = this.getPlayer(socketId);
+    if (!player) return;
+    
+    const chatMsg = {
+      id: Date.now() + Math.random(),
+      sender: player.name,
+      senderId: socketId,
+      message,
+      timestamp: new Date().toISOString()
+    };
+    
+    this.chatHistory.push(chatMsg);
+    if (this.chatHistory.length > 50) {
+      this.chatHistory.shift();
+    }
+    
+    this.io.to(this.roomId).emit('receive_chat', chatMsg);
+  }
+
   startFirstGame() {
     if (this.players.length !== 6) return false;
     
     if (!this.teams.T1.captain || !this.teams.T2.captain) {
       this.assignRandomTeams();
+      this.currentDealerIndex = 0;
     }
     
-    this.currentDealerIndex = 0;
     this.startGameRound();
   }
 
@@ -77,6 +102,7 @@ class Room {
     if (this.gameState !== 'lobby') return;
     if (this.teams.T1.captain !== socketId && this.teams.T2.captain !== socketId) return;
     this.assignRandomTeams();
+    this.currentDealerIndex = 0;
   }
 
   startGameRound() {
@@ -200,6 +226,26 @@ class Room {
     if (this.gameState !== 'playing' || this.seatOrder[this.turnIndex] !== socketId) return;
     
     const player = this.getPlayer(socketId);
+    
+    // Follow suit validation
+    if (this.currentTrick.length > 0) {
+      const leadSuit = this.currentTrick[0].card.suit;
+      const hasLeadSuit = player.hand.some(c => c.suit === leadSuit);
+      const isThurup = this.hiddenThurup && card.suit === this.hiddenThurup.suit;
+      
+      if (hasLeadSuit && card.suit !== leadSuit && !isThurup) {
+        // Player must follow suit unless they are playing a Thurup card
+        this.io.to(socketId).emit('error', 'You must follow suit!');
+        return;
+      }
+    }
+    
+    // Auto-reveal thurup if the hidden card itself is played
+    if (this.hiddenThurup && card.suit === this.hiddenThurup.suit && card.name === this.hiddenThurup.name) {
+       this.isThurupRevealed = true;
+       this.thurup = this.hiddenThurup;
+    }
+
     // Remove card from hand
     player.hand = player.hand.filter(c => c.suit !== card.suit || c.name !== card.name);
     
@@ -211,7 +257,7 @@ class Room {
       
       const leadSuit = this.currentTrick[0].card.suit;
       const thurupSuit = this.isThurupRevealed ? this.hiddenThurup.suit : null;
-      const CARD_POWER = { 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1, '3': 8 }; 
+      const CARD_POWER = { '3': 8, 'J': 8, '9': 7, 'A': 6, '10': 5, 'K': 4, 'Q': 3, '8': 2, '7': 1 };
       let highestPower = CARD_POWER[this.currentTrick[0].card.name];
       let winningSuit = leadSuit;
       let winnerSocket = this.currentTrick[0].socketId;
@@ -249,6 +295,23 @@ class Room {
         // Check if round is over
         if (this.players.every(p => p.hand.length === 0)) {
           this.gameState = 'round_finished'; 
+          
+          setTimeout(() => {
+            this.currentDealerIndex = (this.currentDealerIndex + 1) % 6;
+            if (this.pendingCollapse) {
+                this.gamesAfterL3++;
+                if (this.gamesAfterL3 > 1) {
+                    this.assignRandomTeams();
+                    this.currentDealerIndex = 0;
+                    this.pendingCollapse = false;
+                    this.gamesAfterL3 = 0;
+                    this.teams.T1.L = 0;
+                    this.teams.T2.L = 0;
+                }
+            }
+            this.gameState = 'lobby';
+            this.broadcastState();
+          }, 5000);
         }
         
         this.broadcastState();
@@ -260,36 +323,42 @@ class Room {
     }
   }
 
-  declareWin(socketId, amount = 1) {
+
+
+  transferManualCoins(socketId, amount, color, targetTeam) {
     if (this.teams.T1.captain !== socketId && this.teams.T2.captain !== socketId) return;
-    const winningTeam = this.teams.T1.captain === socketId ? 'T1' : 'T2';
-    const losingTeam = winningTeam === 'T1' ? 'T2' : 'T1';
+    if (color !== 'yellow' && color !== 'red') return;
+    
+    const receivingTeam = targetTeam;
+    const losingTeam = targetTeam === 'T1' ? 'T2' : 'T1';
 
     for (let i = 0; i < amount; i++) {
-        if (this.centralCoins.yellow > 0) {
-            this.centralCoins.yellow--;
-            this.teams[winningTeam].coins.yellow++;
-        } else if (this.centralCoins.red > 0) {
-            this.centralCoins.red--;
-            this.teams[winningTeam].coins.red++;
-        } else if (this.teams[losingTeam].coins.yellow > 0) {
-            this.teams[losingTeam].coins.yellow--;
-            this.teams[winningTeam].coins.yellow++;
-        } else if (this.teams[losingTeam].coins.red > 0) {
-            this.teams[losingTeam].coins.red--;
-            this.teams[winningTeam].coins.red++;
+        if (this.centralCoins[color] > 0) {
+            this.centralCoins[color]--;
+            this.teams[receivingTeam].coins[color]++;
+        } else if (this.teams[losingTeam].coins[color] > 0) {
+            this.teams[losingTeam].coins[color]--;
+            this.teams[receivingTeam].coins[color]++;
         }
     }
     
-    // Rotate the starting player for the next game
-    this.currentDealerIndex = (this.currentDealerIndex + 1) % 6;
+    // Check for L1/L2/L3 Progression
+    if (this.teams[receivingTeam].coins.yellow === 6 && this.teams[receivingTeam].coins.red === 1) {
+        this.teams[receivingTeam].L += 1;
+        
+        // Reset coins to center
+        this.teams.T1.coins = { yellow: 0, red: 0 };
+        this.teams.T2.coins = { yellow: 0, red: 0 };
+        this.centralCoins = { yellow: 6, red: 1 };
+        
+        // Check for L3
+        if (this.teams[receivingTeam].L >= 3) {
+            this.pendingCollapse = true;
+            this.gamesAfterL3 = 0;
+            this.io.to(this.roomId).emit('l3_reached', receivingTeam);
+        }
+    }
     
-    // Reset back to lobby to start new round
-    setTimeout(() => {
-      this.gameState = 'lobby';
-      this.broadcastState();
-    }, 4000);
-
     this.broadcastState();
   }
 
@@ -307,7 +376,8 @@ class Room {
       isThurupRevealed: this.isThurupRevealed,
       teamPoints: this.teamPoints,
       thurup: this.thurup,
-      centralCoins: this.centralCoins
+      centralCoins: this.centralCoins,
+      chatHistory: this.chatHistory
     };
 
     this.players.forEach(p => {

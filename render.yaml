@@ -2,9 +2,9 @@ services:
   - type: web
     name: gulan-game-server
     env: node
-    rootDir: server
-    buildCommand: npm install
-    startCommand: node index.js
+    rootDir: .
+    buildCommand: npm install && npm run build
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
